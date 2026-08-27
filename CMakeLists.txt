@@ -14,6 +14,9 @@ else()
 endif()
 
 option(RAPIDYYJSON_BUILD_TESTS "Build the conformance test suite" ${RAPIDYYJSON_IS_TOP_LEVEL})
+option(RAPIDYYJSON_BUILD_RAPIDJSON_SUITE
+       "Also build RapidJSON's own unit tests against rapidyyjson (fetches RapidJSON and googletest)"
+       OFF)
 option(RAPIDYYJSON_INSTALL "Generate the install target" ${RAPIDYYJSON_IS_TOP_LEVEL})
 
 include(GNUInstallDirs)

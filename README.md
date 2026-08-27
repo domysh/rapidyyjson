@@ -237,17 +237,18 @@ here deliberately:
 
 ## Known divergences
 
-1. **Parse error codes are approximate.** `HasParseError()`, `GetErrorOffset()`
-   and `ParseResult` are exact, but the specific `ParseErrorCode` is derived
-   from yyjson's error code and message, so a malformed document may report a
-   neighbouring code (often `kParseErrorUnspecificSyntaxError`) where RapidJSON
-   would name the exact production.
+1. **Parse error codes and offsets are approximate.** `HasParseError()` and
+   `ParseResult`'s success/failure are exact, but the specific `ParseErrorCode`
+   is derived from yyjson's error code and message, so a malformed document may
+   report a neighbouring code (often `kParseErrorUnspecificSyntaxError`) where
+   RapidJSON would name the exact production, and `GetErrorOffset()` is yyjson's
+   error position rather than RapidJSON's.
 2. **`kParseInsituFlag` is accepted but not destructive.** `ParseInsitu()`
    yields the same DOM, but the source buffer is left untouched and strings are
    copied into the allocator instead of pointing into it.
 3. **`kParseStopWhenDoneFlag`** leaves the cursor just past the root value for
-   `GenericStringStream`; for other stream types the stream is drained to its
-   end even though parsing stopped earlier.
+   `GenericStringStream` and `GenericInsituStringStream`; for other stream types
+   the stream is drained to its end even though parsing stopped earlier.
 4. **`kParseIterativeFlag`, `kParseFullPrecisionFlag` and
    `kParseValidateEncodingFlag` are no-ops** because the scanner is already
    iterative, exact, and UTF-8-validating.
@@ -258,6 +259,17 @@ here deliberately:
    (`RAPIDJSON_48BITPOINTER_OPTIMIZATION`). There is also no short-string inline
    optimisation, so `sizeof(Value)` is 24 rather than 16 — an internal detail
    with no API consequence.
+7. **A handler can only terminate a parse of well-formed input.** The whole
+   document is scanned before the first event is emitted, so when a handler
+   returns `false` on input that is *also* malformed, the scanner's syntax error
+   is reported instead of `kParseErrorTermination`. For valid input,
+   `kParseErrorTermination` is reported as RapidJSON does, but its offset is the
+   number of bytes scanned rather than the position of the terminating event.
+8. **`kParseNanAndInfFlag` is more permissive.** yyjson also accepts spellings
+   like `nan` and `NAN`, which RapidJSON rejects with
+   `kParseErrorValueInvalid`.
+9. **`StringRef(0, 0)` is tolerated**, following current RapidJSON, and yields
+   an empty string; RapidJSON 1.1.0 asserts on any null pointer here.
 
 ## Tests
 
@@ -281,12 +293,37 @@ It has no test-framework dependency, so it also builds by hand:
 c++ -std=c++17 -Iinclude test/conformance.cc -lyyjson -o conformance && ./conformance
 ```
 
+### RapidJSON's own suite
+
+Since RapidJSON 1.1.0 is the specification, its unit tests are the real
+conformance check, and they run here too:
+[`test/rapidjson-suite`](test/rapidjson-suite) fetches RapidJSON at `v1.1.0`,
+puts its `test/unittest` sources through the same mechanical rename described
+above, and builds them against these headers.
+
+```bash
+cmake -S . -B build -DRAPIDYYJSON_BUILD_RAPIDJSON_SUITE=ON
+cmake --build build --parallel && ctest --test-dir build --output-on-failure
+```
+
+**204 of RapidJSON's 223 tests pass unmodified.** The other 19 are excluded by an
+explicit filter, each one tied to a numbered entry in
+[Known divergences](#known-divergences) — mostly the error-code and error-offset
+tests. Five of RapidJSON's 26 test files are not ported at all, because they test
+its own number-parsing, regex and SIMD internals, which yyjson replaces outright.
+[The suite's README](test/rapidjson-suite/README.md) has the full accounting, and
+lists the seven defects and missing API pieces the suite found on its first run.
+
+The option is off by default because it needs network access to fetch RapidJSON
+and googletest.
+
 ## CMake options
 
 | Option | Default | Effect |
 | ------ | ------- | ------ |
 | `RAPIDYYJSON_BUILD_TESTS` | `ON` when top-level, else `OFF` | Build and register the conformance suite |
 | `RAPIDYYJSON_INSTALL` | `ON` when top-level, else `OFF` | Generate the install and export targets |
+| `RAPIDYYJSON_BUILD_RAPIDJSON_SUITE` | `OFF` | Also build RapidJSON's own unit tests against this library (fetches RapidJSON and googletest) |
 
 ## Versioning
 
@@ -299,7 +336,8 @@ guarded on `RAPIDJSON_VERSION_STRING` keeps working after the rename.
 Issues and pull requests are welcome. Anything that changes observable behaviour
 should come with an assertion in `test/conformance.cc`, and the rule for
 resolving a question is simple: **RapidJSON 1.1.0 is the specification.** If the
-two disagree and it is not on the divergence list above, that is a bug here.
+two disagree and it is not on the divergence list above, that is a bug here —
+and RapidJSON's own suite is wired up to say so.
 
 ## License
 

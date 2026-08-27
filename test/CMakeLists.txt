@@ -6,3 +6,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 endif()
 
 add_test(NAME conformance COMMAND rapidyyjson-conformance)
+
+if(RAPIDYYJSON_BUILD_RAPIDJSON_SUITE)
+    add_subdirectory(rapidjson-suite)
+endif()

@@ -14,6 +14,7 @@
 #define RAPIDYYJSON_INTERNAL_DTOA_H_
 
 #include "../rapidyyjson.h"
+#include "ieee754.h"
 #include "itoa.h"
 
 #include <cmath>

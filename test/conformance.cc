@@ -867,6 +867,145 @@ static void TestCrossAllocatorCopy() {
 }
 
 
+// Defects found by running RapidJSON's own unit test suite against this library
+// (test/rapidjson-suite). Each block pins the behaviour the suite exercises.
+static void TestSuiteRegressions() {
+    // A wide-encoding string stream has to be transcoded into UTF-8 for the scanner;
+    // handing over the raw code units made every non-UTF8 GenericStringStream fail to parse.
+    {
+        GenericStringStream<UTF16<>> s(L"{\"k\":[1,\"Hello\"]}");
+        GenericDocument<UTF16<>> d;
+        d.ParseStream(s);
+        CHECK(!d.HasParseError());
+        CHECK(d[L"k"].Size() == 2);
+        CHECK(d[L"k"][1].GetStringLength() == 5);
+        CHECK(d[L"k"][1].GetString()[0] == L'H');
+    }
+
+    // Transcoded strings are handed to the handler NUL-terminated, as RapidJSON's are.
+    // An empty one used to be a `const char*` NUL reinterpreted as a wide character.
+    {
+        GenericStringStream<UTF16<>> s(L"\"\"");
+        GenericDocument<UTF16<>> d;
+        d.ParseStream(s);
+        CHECK(!d.HasParseError());
+        CHECK(d.IsString());
+        CHECK(d.GetStringLength() == 0);
+        CHECK(d.GetString()[0] == L'\0');
+    }
+
+    // kParseStopWhenDoneFlag repositions the cursor relative to where *this* parse began,
+    // so successive parses walk forward through the stream instead of restarting.
+    {
+        struct Counter : BaseReaderHandler<UTF8<>, Counter> {
+            int roots = 0;
+            bool StartObject() { return true; }
+            bool EndObject(SizeType) { ++roots; return true; }
+            bool StartArray() { return true; }
+            bool EndArray(SizeType) { ++roots; return true; }
+        } h;
+        StringStream s("{}[] a");
+        Reader reader;
+        CHECK(!reader.Parse<kParseStopWhenDoneFlag>(s, h).IsError());
+        CHECK(!reader.Parse<kParseStopWhenDoneFlag>(s, h).IsError());
+        CHECK(h.roots == 2);
+        CHECK(s.Take() == ' ');
+        CHECK(s.Take() == 'a');
+    }
+
+    // The same holds for in-situ string streams.
+    {
+        struct Counter : BaseReaderHandler<UTF8<>, Counter> {
+            int roots = 0;
+            bool StartObject() { return true; }
+            bool EndObject(SizeType) { ++roots; return true; }
+            bool StartArray() { return true; }
+            bool EndArray(SizeType) { ++roots; return true; }
+        } h;
+        char buf[] = "{}[] a";
+        InsituStringStream s(buf);
+        Reader reader;
+        CHECK(!reader.Parse<kParseInsituFlag | kParseStopWhenDoneFlag>(s, h).IsError());
+        CHECK(!reader.Parse<kParseInsituFlag | kParseStopWhenDoneFlag>(s, h).IsError());
+        CHECK(h.roots == 2);
+        CHECK(s.Take() == ' ');
+        CHECK(s.Take() == 'a');
+    }
+
+    // RAPIDYYJSON_64BIT drives RAPIDYYJSON_ALIGN and sizeof(Value); it used to be undefined,
+    // which silently selected RapidJSON's 32-bit expectations.
+    {
+#if defined(__LP64__) || defined(_WIN64)
+        CHECK(RAPIDYYJSON_64BIT == 1);
+        CHECK(RAPIDYYJSON_ALIGN(0) == 0);
+        CHECK(RAPIDYYJSON_ALIGN(1) == 8);
+        CHECK(RAPIDYYJSON_ALIGN(8) == 8);
+        CHECK(RAPIDYYJSON_ALIGN(9) == 16);
+        CHECK(sizeof(Value) == 24);
+#else
+        CHECK(RAPIDYYJSON_64BIT == 0);
+        CHECK(RAPIDYYJSON_ALIGN(1) == 4);
+#endif
+    }
+
+    // internal::Double, the IEEE-754 view reader.h and dtoa.h expose.
+    {
+        CHECK(internal::Double(1.0).Uint64Value() == RAPIDYYJSON_UINT64_C2(0x3FF00000, 0x00000000));
+        CHECK(internal::Double(RAPIDYYJSON_UINT64_C2(0x3FF00000, 0x00000000)).Value() == 1.0);
+        CHECK(internal::Double(-1.0).Sign() && !internal::Double(1.0).Sign());
+        CHECK(internal::Double(0.0).IsZero() && internal::Double(-0.0).IsZero());
+        CHECK(internal::Double(1.0).Exponent() == 0 && internal::Double(2.0).Exponent() == 1);
+        CHECK(internal::Double(1.0).IntegerSignificand() == (uint64_t(1) << 52));
+        CHECK(internal::Double(1.0).IntegerExponent() == -52);
+        CHECK(internal::Double(1.0).IsNormal());
+        CHECK(internal::Double::EffectiveSignificandSize(0) == 53);
+        CHECK(internal::Double::EffectiveSignificandSize(-1074) == 0);
+        CHECK(internal::Double(-1.0).ToBias() < internal::Double(1.0).ToBias());
+    }
+
+    // SkipWhitespace, in both its stream and its pointer form.
+    {
+        StringStream s("   \t\r\n x");
+        SkipWhitespace(s);
+        CHECK(s.Peek() == 'x');
+
+        const char* p = "  \n\tzz";
+        CHECK(*SkipWhitespace(p, p + 6) == 'z');
+        const char* blank = "    ";
+        CHECK(SkipWhitespace(blank, blank + 4) == blank + 4);
+    }
+
+    // The *ByPointer free functions accept the same default/value flavours as the members:
+    // a Value, a const Ch*, a std::string and any primitive, with or without an allocator.
+    {
+        Document d;
+        d.Parse("{\"a\":{\"b\":1}}");
+        auto& alloc = d.GetAllocator();
+
+        CHECK(GetValueByPointerWithDefault(d, Pointer("/a/b"), 99, alloc).GetInt() == 1);
+        CHECK(GetValueByPointerWithDefault(d, Pointer("/a/new"), 42, alloc).GetInt() == 42);
+        CHECK_STR(GetValueByPointerWithDefault(d, "/a/s", "hi", alloc).GetString(), "hi");
+        CHECK(GetValueByPointerWithDefault(d, Pointer("/a/t"), true).GetBool());
+        CHECK_STR(GetValueByPointerWithDefault(d, "/a/u", std::string("str")).GetString(), "str");
+
+        SetValueByPointer(d, Pointer("/a/b"), 7, alloc);
+        CHECK(d["a"]["b"].GetInt() == 7);
+        SetValueByPointer(d, "/a/b", "seven", alloc);
+        CHECK_STR(d["a"]["b"].GetString(), "seven");
+        SetValueByPointer(d, Pointer("/a/b"), std::string("8"));
+        CHECK_STR(d["a"]["b"].GetString(), "8");
+        SetValueByPointer(d, "/a/b", 9);
+        CHECK(d["a"]["b"].GetInt() == 9);
+
+        Value swapped(kArrayType);
+        SwapValueByPointer(d, Pointer("/a/b"), swapped);
+        CHECK(d["a"]["b"].IsArray() && swapped.GetInt() == 9);
+        Value again(1);
+        SwapValueByPointer(d, "/a/b", again);
+        CHECK(d["a"]["b"].GetInt() == 1 && again.IsArray());
+    }
+}
+
 // Instantiates the corners of the API that the behavioural tests do not reach, so that every
 // template advertised in README.md is actually type-checked.
 static void TestApiSurface() {
@@ -988,6 +1127,7 @@ int main() {
     TestEncodingsAndTranscoding();
     TestBulkMutation();
     TestCrossAllocatorCopy();
+    TestSuiteRegressions();
     TestApiSurface();
     std::printf("\n%d checks, %d failures\n", checks, failures);
     return failures != 0;

@@ -86,10 +86,28 @@
 #endif // RAPIDYYJSON_ENDIAN
 
 ///////////////////////////////////////////////////////////////////////////////
+// RAPIDYYJSON_64BIT
+
+//! Whether the target is a 64-bit architecture.
+#ifndef RAPIDYYJSON_64BIT
+#if defined(__LP64__) || (defined(__x86_64__) && defined(__ILP32__)) || defined(_WIN64) ||          \
+    defined(__EMSCRIPTEN__)
+#define RAPIDYYJSON_64BIT 1
+#else
+#define RAPIDYYJSON_64BIT 0
+#endif
+#endif // RAPIDYYJSON_64BIT
+
+///////////////////////////////////////////////////////////////////////////////
 // Alignment / integer helpers
 
+//! Data alignment of the machine: 4 bytes on 32-bit platforms, 8 on 64-bit ones.
 #ifndef RAPIDYYJSON_ALIGN
-#define RAPIDYYJSON_ALIGN(x) (((x) + static_cast<size_t>(7u)) & ~static_cast<size_t>(7u))
+#if RAPIDYYJSON_64BIT == 1
+#define RAPIDYYJSON_ALIGN(x) (((x) + static_cast<uint64_t>(7u)) & ~static_cast<uint64_t>(7u))
+#else
+#define RAPIDYYJSON_ALIGN(x) (((x) + 3u) & ~3u)
+#endif
 #endif
 
 #ifndef RAPIDYYJSON_UINT64_C2

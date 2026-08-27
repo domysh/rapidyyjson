@@ -1255,6 +1255,161 @@ GetValueByPointerWithDefault(T& root,
         .GetWithDefault(root, defaultValue, a);
 }
 
+template <typename T>
+typename T::ValueType&
+GetValueByPointerWithDefault(T& root,
+                             const GenericPointer<typename T::ValueType>& pointer,
+                             const typename T::Ch* defaultValue,
+                             typename T::AllocatorType& a)
+{
+    return pointer.GetWithDefault(root, defaultValue, a);
+}
+
+template <typename T, typename CharType, size_t N>
+typename T::ValueType&
+GetValueByPointerWithDefault(T& root,
+                             const CharType (&source)[N],
+                             const typename T::Ch* defaultValue,
+                             typename T::AllocatorType& a)
+{
+    return GenericPointer<typename T::ValueType>(source, N - 1)
+        .GetWithDefault(root, defaultValue, a);
+}
+
+#if RAPIDYYJSON_HAS_STDSTRING
+template <typename T>
+typename T::ValueType&
+GetValueByPointerWithDefault(T& root,
+                             const GenericPointer<typename T::ValueType>& pointer,
+                             const std::basic_string<typename T::Ch>& defaultValue,
+                             typename T::AllocatorType& a)
+{
+    return pointer.GetWithDefault(root, defaultValue, a);
+}
+#endif
+
+#if RAPIDYYJSON_HAS_STDSTRING
+template <typename T, typename CharType, size_t N>
+typename T::ValueType&
+GetValueByPointerWithDefault(T& root,
+                             const CharType (&source)[N],
+                             const std::basic_string<typename T::Ch>& defaultValue,
+                             typename T::AllocatorType& a)
+{
+    return GenericPointer<typename T::ValueType>(source, N - 1)
+        .GetWithDefault(root, defaultValue, a);
+}
+#endif
+
+template <typename T, typename T2>
+RAPIDYYJSON_DISABLEIF_RETURN((internal::OrExpr<internal::IsPointer<T2>,
+                                               internal::IsGenericValue<T2>>),
+                             (typename T::ValueType&))
+GetValueByPointerWithDefault(T& root,
+                             const GenericPointer<typename T::ValueType>& pointer,
+                             T2 defaultValue,
+                             typename T::AllocatorType& a)
+{
+    return pointer.GetWithDefault(root, defaultValue, a);
+}
+
+template <typename T, typename CharType, size_t N, typename T2>
+RAPIDYYJSON_DISABLEIF_RETURN((internal::OrExpr<internal::IsPointer<T2>,
+                                               internal::IsGenericValue<T2>>),
+                             (typename T::ValueType&))
+GetValueByPointerWithDefault(T& root,
+                             const CharType (&source)[N],
+                             T2 defaultValue,
+                             typename T::AllocatorType& a)
+{
+    return GenericPointer<typename T::ValueType>(source, N - 1)
+        .GetWithDefault(root, defaultValue, a);
+}
+
+template <typename DocumentType>
+typename DocumentType::ValueType&
+GetValueByPointerWithDefault(DocumentType& document,
+                             const GenericPointer<typename DocumentType::ValueType>& pointer,
+                             const typename DocumentType::ValueType& defaultValue)
+{
+    return pointer.GetWithDefault(document, defaultValue);
+}
+
+template <typename DocumentType, typename CharType, size_t N>
+typename DocumentType::ValueType&
+GetValueByPointerWithDefault(DocumentType& document,
+                             const CharType (&source)[N],
+                             const typename DocumentType::ValueType& defaultValue)
+{
+    return GenericPointer<typename DocumentType::ValueType>(source, N - 1)
+        .GetWithDefault(document, defaultValue);
+}
+
+template <typename DocumentType>
+typename DocumentType::ValueType&
+GetValueByPointerWithDefault(DocumentType& document,
+                             const GenericPointer<typename DocumentType::ValueType>& pointer,
+                             const typename DocumentType::Ch* defaultValue)
+{
+    return pointer.GetWithDefault(document, defaultValue);
+}
+
+template <typename DocumentType, typename CharType, size_t N>
+typename DocumentType::ValueType&
+GetValueByPointerWithDefault(DocumentType& document,
+                             const CharType (&source)[N],
+                             const typename DocumentType::Ch* defaultValue)
+{
+    return GenericPointer<typename DocumentType::ValueType>(source, N - 1)
+        .GetWithDefault(document, defaultValue);
+}
+
+#if RAPIDYYJSON_HAS_STDSTRING
+template <typename DocumentType>
+typename DocumentType::ValueType&
+GetValueByPointerWithDefault(DocumentType& document,
+                             const GenericPointer<typename DocumentType::ValueType>& pointer,
+                             const std::basic_string<typename DocumentType::Ch>& defaultValue)
+{
+    return pointer.GetWithDefault(document, defaultValue);
+}
+#endif
+
+#if RAPIDYYJSON_HAS_STDSTRING
+template <typename DocumentType, typename CharType, size_t N>
+typename DocumentType::ValueType&
+GetValueByPointerWithDefault(DocumentType& document,
+                             const CharType (&source)[N],
+                             const std::basic_string<typename DocumentType::Ch>& defaultValue)
+{
+    return GenericPointer<typename DocumentType::ValueType>(source, N - 1)
+        .GetWithDefault(document, defaultValue);
+}
+#endif
+
+template <typename DocumentType, typename T2>
+RAPIDYYJSON_DISABLEIF_RETURN((internal::OrExpr<internal::IsPointer<T2>,
+                                               internal::IsGenericValue<T2>>),
+                             (typename DocumentType::ValueType&))
+GetValueByPointerWithDefault(DocumentType& document,
+                             const GenericPointer<typename DocumentType::ValueType>& pointer,
+                             T2 defaultValue)
+{
+    return pointer.GetWithDefault(document, defaultValue);
+}
+
+template <typename DocumentType, typename CharType, size_t N, typename T2>
+RAPIDYYJSON_DISABLEIF_RETURN((internal::OrExpr<internal::IsPointer<T2>,
+                                               internal::IsGenericValue<T2>>),
+                             (typename DocumentType::ValueType&))
+GetValueByPointerWithDefault(DocumentType& document,
+                             const CharType (&source)[N],
+                             T2 defaultValue)
+{
+    return GenericPointer<typename DocumentType::ValueType>(source, N - 1)
+        .GetWithDefault(document, defaultValue);
+}
+
 //////////////////////////////////////////////////////////////////////////////
 
 template <typename T>
@@ -1267,6 +1422,17 @@ SetValueByPointer(T& root,
     return pointer.Set(root, value, a);
 }
 
+template <typename T, typename CharType, size_t N>
+typename T::ValueType&
+SetValueByPointer(T& root,
+                  const CharType (&source)[N],
+                  typename T::ValueType& value,
+                  typename T::AllocatorType& a)
+{
+    return GenericPointer<typename T::ValueType>(source, N - 1)
+        .Set(root, value, a);
+}
+
 template <typename T>
 typename T::ValueType&
 SetValueByPointer(T& root,
@@ -1281,21 +1447,58 @@ template <typename T, typename CharType, size_t N>
 typename T::ValueType&
 SetValueByPointer(T& root,
                   const CharType (&source)[N],
-                  typename T::ValueType& value,
+                  const typename T::ValueType& value,
                   typename T::AllocatorType& a)
 {
-    return GenericPointer<typename T::ValueType>(source, N - 1).Set(root, value, a);
+    return GenericPointer<typename T::ValueType>(source, N - 1)
+        .Set(root, value, a);
+}
+
+template <typename T>
+typename T::ValueType&
+SetValueByPointer(T& root,
+                  const GenericPointer<typename T::ValueType>& pointer,
+                  const typename T::Ch* value,
+                  typename T::AllocatorType& a)
+{
+    return pointer.Set(root, value, a);
 }
 
 template <typename T, typename CharType, size_t N>
 typename T::ValueType&
 SetValueByPointer(T& root,
                   const CharType (&source)[N],
-                  const typename T::ValueType& value,
+                  const typename T::Ch* value,
                   typename T::AllocatorType& a)
 {
-    return GenericPointer<typename T::ValueType>(source, N - 1).Set(root, value, a);
+    return GenericPointer<typename T::ValueType>(source, N - 1)
+        .Set(root, value, a);
 }
+
+#if RAPIDYYJSON_HAS_STDSTRING
+template <typename T>
+typename T::ValueType&
+SetValueByPointer(T& root,
+                  const GenericPointer<typename T::ValueType>& pointer,
+                  const std::basic_string<typename T::Ch>& value,
+                  typename T::AllocatorType& a)
+{
+    return pointer.Set(root, value, a);
+}
+#endif
+
+#if RAPIDYYJSON_HAS_STDSTRING
+template <typename T, typename CharType, size_t N>
+typename T::ValueType&
+SetValueByPointer(T& root,
+                  const CharType (&source)[N],
+                  const std::basic_string<typename T::Ch>& value,
+                  typename T::AllocatorType& a)
+{
+    return GenericPointer<typename T::ValueType>(source, N - 1)
+        .Set(root, value, a);
+}
+#endif
 
 template <typename T, typename T2>
 RAPIDYYJSON_DISABLEIF_RETURN((internal::OrExpr<internal::IsPointer<T2>,
@@ -1313,9 +1516,116 @@ template <typename T, typename CharType, size_t N, typename T2>
 RAPIDYYJSON_DISABLEIF_RETURN((internal::OrExpr<internal::IsPointer<T2>,
                                                internal::IsGenericValue<T2>>),
                              (typename T::ValueType&))
-SetValueByPointer(T& root, const CharType (&source)[N], T2 value, typename T::AllocatorType& a)
+SetValueByPointer(T& root,
+                  const CharType (&source)[N],
+                  T2 value,
+                  typename T::AllocatorType& a)
 {
-    return GenericPointer<typename T::ValueType>(source, N - 1).Set(root, value, a);
+    return GenericPointer<typename T::ValueType>(source, N - 1)
+        .Set(root, value, a);
+}
+
+template <typename DocumentType>
+typename DocumentType::ValueType&
+SetValueByPointer(DocumentType& document,
+                  const GenericPointer<typename DocumentType::ValueType>& pointer,
+                  typename DocumentType::ValueType& value)
+{
+    return pointer.Set(document, value);
+}
+
+template <typename DocumentType, typename CharType, size_t N>
+typename DocumentType::ValueType&
+SetValueByPointer(DocumentType& document,
+                  const CharType (&source)[N],
+                  typename DocumentType::ValueType& value)
+{
+    return GenericPointer<typename DocumentType::ValueType>(source, N - 1)
+        .Set(document, value);
+}
+
+template <typename DocumentType>
+typename DocumentType::ValueType&
+SetValueByPointer(DocumentType& document,
+                  const GenericPointer<typename DocumentType::ValueType>& pointer,
+                  const typename DocumentType::ValueType& value)
+{
+    return pointer.Set(document, value);
+}
+
+template <typename DocumentType, typename CharType, size_t N>
+typename DocumentType::ValueType&
+SetValueByPointer(DocumentType& document,
+                  const CharType (&source)[N],
+                  const typename DocumentType::ValueType& value)
+{
+    return GenericPointer<typename DocumentType::ValueType>(source, N - 1)
+        .Set(document, value);
+}
+
+template <typename DocumentType>
+typename DocumentType::ValueType&
+SetValueByPointer(DocumentType& document,
+                  const GenericPointer<typename DocumentType::ValueType>& pointer,
+                  const typename DocumentType::Ch* value)
+{
+    return pointer.Set(document, value);
+}
+
+template <typename DocumentType, typename CharType, size_t N>
+typename DocumentType::ValueType&
+SetValueByPointer(DocumentType& document,
+                  const CharType (&source)[N],
+                  const typename DocumentType::Ch* value)
+{
+    return GenericPointer<typename DocumentType::ValueType>(source, N - 1)
+        .Set(document, value);
+}
+
+#if RAPIDYYJSON_HAS_STDSTRING
+template <typename DocumentType>
+typename DocumentType::ValueType&
+SetValueByPointer(DocumentType& document,
+                  const GenericPointer<typename DocumentType::ValueType>& pointer,
+                  const std::basic_string<typename DocumentType::Ch>& value)
+{
+    return pointer.Set(document, value);
+}
+#endif
+
+#if RAPIDYYJSON_HAS_STDSTRING
+template <typename DocumentType, typename CharType, size_t N>
+typename DocumentType::ValueType&
+SetValueByPointer(DocumentType& document,
+                  const CharType (&source)[N],
+                  const std::basic_string<typename DocumentType::Ch>& value)
+{
+    return GenericPointer<typename DocumentType::ValueType>(source, N - 1)
+        .Set(document, value);
+}
+#endif
+
+template <typename DocumentType, typename T2>
+RAPIDYYJSON_DISABLEIF_RETURN((internal::OrExpr<internal::IsPointer<T2>,
+                                               internal::IsGenericValue<T2>>),
+                             (typename DocumentType::ValueType&))
+SetValueByPointer(DocumentType& document,
+                  const GenericPointer<typename DocumentType::ValueType>& pointer,
+                  T2 value)
+{
+    return pointer.Set(document, value);
+}
+
+template <typename DocumentType, typename CharType, size_t N, typename T2>
+RAPIDYYJSON_DISABLEIF_RETURN((internal::OrExpr<internal::IsPointer<T2>,
+                                               internal::IsGenericValue<T2>>),
+                             (typename DocumentType::ValueType&))
+SetValueByPointer(DocumentType& document,
+                  const CharType (&source)[N],
+                  T2 value)
+{
+    return GenericPointer<typename DocumentType::ValueType>(source, N - 1)
+        .Set(document, value);
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -1337,8 +1647,29 @@ SwapValueByPointer(T& root,
                    typename T::ValueType& value,
                    typename T::AllocatorType& a)
 {
-    return GenericPointer<typename T::ValueType>(source, N - 1).Swap(root, value, a);
+    return GenericPointer<typename T::ValueType>(source, N - 1)
+        .Swap(root, value, a);
 }
+
+template <typename DocumentType>
+typename DocumentType::ValueType&
+SwapValueByPointer(DocumentType& document,
+                   const GenericPointer<typename DocumentType::ValueType>& pointer,
+                   typename DocumentType::ValueType& value)
+{
+    return pointer.Swap(document, value);
+}
+
+template <typename DocumentType, typename CharType, size_t N>
+typename DocumentType::ValueType&
+SwapValueByPointer(DocumentType& document,
+                   const CharType (&source)[N],
+                   typename DocumentType::ValueType& value)
+{
+    return GenericPointer<typename DocumentType::ValueType>(source, N - 1)
+        .Swap(document, value);
+}
+
 
 //////////////////////////////////////////////////////////////////////////////
 

@@ -12,6 +12,7 @@
 #include "allocators.h"
 #include "encodings.h"
 #include "error/error.h"
+#include "internal/ieee754.h"
 #include "internal/meta.h"
 #include "internal/stack.h"
 #include "rapidyyjson.h"
@@ -27,6 +28,87 @@
 #endif
 
 RAPIDYYJSON_NAMESPACE_BEGIN
+
+namespace internal
+{
+
+///////////////////////////////////////////////////////////////////////////////
+// StreamLocalCopy
+
+//! Works on a stack copy of a stream, writing it back on destruction.
+/*! Selected by StreamTraits<Stream>::copyOptimization: streams that are cheap
+    to copy are pulled into a local so the hot loop touches a stack object
+    instead of a reference the compiler cannot prove is unaliased.
+*/
+template <typename Stream, int = StreamTraits<Stream>::copyOptimization>
+class StreamLocalCopy;
+
+//! Keeps a local copy and writes it back.
+template <typename Stream>
+class StreamLocalCopy<Stream, 1>
+{
+  public:
+    StreamLocalCopy(Stream& original)
+        : s(original),
+          original_(original)
+    {
+    }
+
+    ~StreamLocalCopy()
+    {
+        original_ = s;
+    }
+
+    Stream s;
+
+  private:
+    StreamLocalCopy& operator=(const StreamLocalCopy&) = delete;
+
+    Stream& original_;
+};
+
+//! Works on the original stream.
+template <typename Stream>
+class StreamLocalCopy<Stream, 0>
+{
+  public:
+    StreamLocalCopy(Stream& original)
+        : s(original)
+    {
+    }
+
+    Stream& s;
+
+  private:
+    StreamLocalCopy& operator=(const StreamLocalCopy&) = delete;
+};
+
+} // namespace internal
+
+///////////////////////////////////////////////////////////////////////////////
+// SkipWhitespace
+
+//! Advance a stream past JSON whitespace (space, LF, CR, tab).
+template <typename InputStream>
+void
+SkipWhitespace(InputStream& is)
+{
+    internal::StreamLocalCopy<InputStream> copy(is);
+    InputStream& s(copy.s);
+
+    typename InputStream::Ch c;
+    while ((c = s.Peek()) == ' ' || c == '\n' || c == '\r' || c == '\t')
+        s.Take();
+}
+
+//! Advance a pointer past JSON whitespace, stopping at end.
+inline const char*
+SkipWhitespace(const char* p, const char* end)
+{
+    while (p != end && (*p == ' ' || *p == '\n' || *p == '\r' || *p == '\t'))
+        ++p;
+    return p;
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 // ParseFlag
@@ -232,9 +314,17 @@ struct StreamDrain
         }
     }
 
-    //! Number of source code units that correspond to \c consumed UTF-8 bytes; unused for
-    //! non-seekable streams.
-    static void Seek(InputStream&, size_t)
+    //! Opaque record of where a drain started. Meaningless for non-seekable streams.
+    typedef int Mark;
+
+    static Mark Tell(InputStream&)
+    {
+        return 0;
+    }
+
+    //! Reposition the stream \c consumed UTF-8 bytes past \c mark; a no-op for streams that
+    //! cannot be rewound, which are therefore left drained.
+    static void Seek(InputStream&, Mark, size_t)
     {
     }
 };
@@ -249,17 +339,135 @@ struct StreamDrain<SourceEncoding, GenericStringStream<SourceEncoding>>
     static void Drain(Stream& is, std::string& out)
     {
         typedef typename SourceEncoding::Ch Ch;
-        const Ch* p = is.src_;
-        while (*p)
-            ++p;
-        out.assign(reinterpret_cast<const char*>(is.src_),
-                   static_cast<size_t>(p - is.src_) * sizeof(Ch));
-        is.src_ = p; // fully consumed by default
+        if (sizeof(Ch) == 1)
+        {
+            const Ch* p = is.src_;
+            while (*p)
+                ++p;
+            out.assign(reinterpret_cast<const char*>(is.src_), static_cast<size_t>(p - is.src_));
+            is.src_ = p; // fully consumed by default
+        }
+        else
+        {
+            // Transcode wider source encodings into UTF-8 for the scanner, exactly as the
+            // generic drain does. A raw copy of the code units would hand yyjson UTF-16 or
+            // UTF-32 bytes, which are not JSON text.
+            Utf8StringSink sink{&out};
+            for (;;)
+            {
+                if (is.Peek() == static_cast<Ch>(0))
+                {
+                    is.Take();
+                    break;
+                }
+                unsigned codepoint;
+                if (!SourceEncoding::Decode(is, &codepoint))
+                    break;
+                UTF8<char>::Encode(sink, codepoint);
+            }
+        }
     }
 
-    static void Seek(Stream& is, size_t consumed)
+    typedef const typename SourceEncoding::Ch* Mark;
+
+    static Mark Tell(Stream& is)
     {
-        is.src_ = is.head_ + consumed / sizeof(typename SourceEncoding::Ch);
+        return is.src_;
+    }
+
+    static void Seek(Stream& is, Mark mark, size_t consumed)
+    {
+        typedef typename SourceEncoding::Ch Ch;
+        if (sizeof(Ch) == 1)
+        {
+            is.src_ = mark + consumed;
+        }
+        else
+        {
+            // `consumed` counts UTF-8 bytes, which do not map onto source code units by a
+            // fixed ratio, so decode from the mark again until that many have been emitted.
+            Stream walk(mark);
+            std::string bytes;
+            Utf8StringSink sink{&bytes};
+            while (bytes.size() < consumed)
+            {
+                if (walk.Peek() == static_cast<Ch>(0))
+                    break;
+                unsigned codepoint;
+                if (!SourceEncoding::Decode(walk, &codepoint))
+                    break;
+                UTF8<char>::Encode(sink, codepoint);
+            }
+            is.src_ = walk.src_;
+        }
+    }
+};
+
+//! Same treatment for in-situ string streams: they are random-access too, so
+//! kParseStopWhenDoneFlag can leave the cursor exactly after the parsed root value.
+template <typename SourceEncoding>
+struct StreamDrain<SourceEncoding, GenericInsituStringStream<SourceEncoding>>
+{
+    typedef GenericInsituStringStream<SourceEncoding> Stream;
+    typedef typename SourceEncoding::Ch* Mark;
+
+    static Mark Tell(Stream& is)
+    {
+        return is.src_;
+    }
+
+    static void Drain(Stream& is, std::string& out)
+    {
+        typedef typename SourceEncoding::Ch Ch;
+        if (sizeof(Ch) == 1)
+        {
+            const Ch* p = is.src_;
+            while (*p)
+                ++p;
+            out.assign(reinterpret_cast<const char*>(is.src_), static_cast<size_t>(p - is.src_));
+            is.src_ = const_cast<Ch*>(p); // fully consumed by default
+        }
+        else
+        {
+            Utf8StringSink sink{&out};
+            for (;;)
+            {
+                if (is.Peek() == static_cast<Ch>(0))
+                {
+                    is.Take();
+                    break;
+                }
+                unsigned codepoint;
+                if (!SourceEncoding::Decode(is, &codepoint))
+                    break;
+                UTF8<char>::Encode(sink, codepoint);
+            }
+        }
+    }
+
+    static void Seek(Stream& is, Mark mark, size_t consumed)
+    {
+        typedef typename SourceEncoding::Ch Ch;
+        if (sizeof(Ch) == 1)
+        {
+            is.src_ = mark + consumed;
+        }
+        else
+        {
+            Stream walk(mark);
+            std::string bytes;
+            Utf8StringSink sink{&bytes};
+            while (bytes.size() < consumed)
+            {
+                if (walk.Peek() == static_cast<Ch>(0))
+                    break;
+                unsigned codepoint;
+                if (!SourceEncoding::Decode(walk, &codepoint))
+                    break;
+                UTF8<char>::Encode(sink, codepoint);
+            }
+            is.src_ = walk.src_;
+        }
     }
 };
 
@@ -431,9 +639,8 @@ EmitEvents(yyjson_val* root, Handler& handler)
                     return false;                                                                  \
                 TargetEncoding::Encode(sink, cp);                                                  \
             }                                                                                      \
-            if (!handler.CALL(conv.empty() ? reinterpret_cast<const Ch*>("") : &conv[0],           \
-                              static_cast<SizeType>(conv.size()),                                  \
-                              true))                                                               \
+            conv.push_back(Ch()); /* RapidJSON hands handlers a terminated string. */          \
+            if (!handler.CALL(&conv[0], static_cast<SizeType>(conv.size() - 1), true))             \
                 return false;                                                                      \
         }                                                                                          \
     } while (0)
@@ -610,7 +817,9 @@ class GenericReader
         parseResult_.Clear();
 
         std::string buffer;
-        internal::StreamDrain<SourceEncoding, InputStream>::Drain(is, buffer);
+        typedef internal::StreamDrain<SourceEncoding, InputStream> Drainer;
+        const typename Drainer::Mark mark = Drainer::Tell(is);
+        Drainer::Drain(is, buffer);
 
         if (parseFlags & kParseEscapedApostropheFlag)
             internal::RewriteEscapedApostrophes(buffer, (parseFlags & kParseCommentsFlag) != 0);
@@ -639,8 +848,7 @@ class GenericReader
         }
 
         if (parseFlags & kParseStopWhenDoneFlag)
-            internal::StreamDrain<SourceEncoding, InputStream>::Seek(is,
-                                                                     yyjson_doc_get_read_size(doc));
+            Drainer::Seek(is, mark, yyjson_doc_get_read_size(doc));
 
         const bool ok = internal::EmitEvents<TargetEncoding>(yyjson_doc_get_root(doc), handler);
         const size_t read = yyjson_doc_get_read_size(doc);
