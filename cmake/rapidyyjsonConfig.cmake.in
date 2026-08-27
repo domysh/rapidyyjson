@@ -1,0 +1,9 @@
+@PACKAGE_INIT@
+
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}")
+include(FindYyjsonDependency)
+list(REMOVE_AT CMAKE_MODULE_PATH -1)
+
+include("${CMAKE_CURRENT_LIST_DIR}/rapidyyjsonTargets.cmake")
+
+check_required_components(rapidyyjson)

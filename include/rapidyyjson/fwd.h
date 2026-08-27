@@ -1,0 +1,141 @@
+/*
+ * rapidyyjson - a RapidJSON-compatible API implemented on top of yyjson.
+ *
+ * Forward declarations, mirroring `rapidjson/fwd.h`.
+ */
+
+#ifndef RAPIDYYJSON_FWD_H_
+#define RAPIDYYJSON_FWD_H_
+
+#include "rapidyyjson.h"
+
+RAPIDYYJSON_NAMESPACE_BEGIN
+
+// encodings.h
+
+template <typename CharType>
+struct UTF8;
+template <typename CharType>
+struct UTF16;
+template <typename CharType>
+struct UTF16BE;
+template <typename CharType>
+struct UTF16LE;
+template <typename CharType>
+struct UTF32;
+template <typename CharType>
+struct UTF32BE;
+template <typename CharType>
+struct UTF32LE;
+template <typename CharType>
+struct ASCII;
+template <typename CharType>
+struct AutoUTF;
+
+template <typename SourceEncoding, typename TargetEncoding>
+struct Transcoder;
+
+// allocators.h
+
+class CrtAllocator;
+
+template <typename BaseAllocator>
+class MemoryPoolAllocator;
+
+// stream.h
+
+template <typename Encoding>
+struct GenericStringStream;
+
+typedef GenericStringStream<UTF8<char>> StringStream;
+
+template <typename Encoding>
+struct GenericInsituStringStream;
+
+typedef GenericInsituStringStream<UTF8<char>> InsituStringStream;
+
+// stringbuffer.h
+
+template <typename Encoding, typename Allocator>
+class GenericStringBuffer;
+
+typedef GenericStringBuffer<UTF8<char>, CrtAllocator> StringBuffer;
+
+// filereadstream.h
+
+class FileReadStream;
+
+// filewritestream.h
+
+class FileWriteStream;
+
+// memorybuffer.h
+
+template <typename Allocator>
+struct GenericMemoryBuffer;
+
+typedef GenericMemoryBuffer<CrtAllocator> MemoryBuffer;
+
+// memorystream.h
+
+struct MemoryStream;
+
+// reader.h
+
+template <typename Encoding, typename Derived>
+struct BaseReaderHandler;
+
+template <typename SourceEncoding, typename TargetEncoding, typename StackAllocator>
+class GenericReader;
+
+typedef GenericReader<UTF8<char>, UTF8<char>, CrtAllocator> Reader;
+
+// writer.h
+
+template <typename OutputStream,
+          typename SourceEncoding,
+          typename TargetEncoding,
+          typename StackAllocator,
+          unsigned writeFlags>
+class Writer;
+
+// prettywriter.h
+
+template <typename OutputStream,
+          typename SourceEncoding,
+          typename TargetEncoding,
+          typename StackAllocator,
+          unsigned writeFlags>
+class PrettyWriter;
+
+// document.h
+
+template <typename Encoding, typename Allocator>
+class GenericMember;
+
+template <bool Const, typename Encoding, typename Allocator>
+class GenericMemberIterator;
+
+template <typename CharType>
+struct GenericStringRef;
+
+template <typename Encoding, typename Allocator>
+class GenericValue;
+
+typedef GenericValue<UTF8<char>, MemoryPoolAllocator<CrtAllocator>> Value;
+
+template <typename Encoding, typename Allocator, typename StackAllocator>
+class GenericDocument;
+
+typedef GenericDocument<UTF8<char>, MemoryPoolAllocator<CrtAllocator>, CrtAllocator> Document;
+
+// pointer.h
+
+template <typename ValueType, typename Allocator>
+class GenericPointer;
+
+typedef GenericPointer<Value, CrtAllocator> Pointer;
+
+RAPIDYYJSON_NAMESPACE_END
+
+#endif // RAPIDYYJSON_FWD_H_

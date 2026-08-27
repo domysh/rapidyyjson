@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  conformance:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-gcc
+            os: ubuntu-latest
+            cxx: g++
+          - name: linux-clang
+            os: ubuntu-latest
+            cxx: clang++
+          - name: macos-clang
+            os: macos-latest
+            cxx: clang++
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install yyjson (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libyyjson-dev || {
+            git clone --depth 1 --branch 0.12.0 https://github.com/ibireme/yyjson.git
+            cmake -S yyjson -B yyjson/build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON
+            cmake --build yyjson/build --parallel
+            sudo cmake --install yyjson/build
+            sudo ldconfig
+          }
+
+      - name: Install yyjson (macOS)
+        if: runner.os == 'macOS'
+        run: brew install yyjson
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=${{ matrix.cxx }}
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Conformance tests
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Stage an install
+        run: cmake --install build --prefix "${{ github.workspace }}/staging"
+
+      - name: Consume the installed package
+        run: |
+          cmake -S example -B example/build \
+            -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} \
+            -DCMAKE_PREFIX_PATH="${{ github.workspace }}/staging"
+          cmake --build example/build --parallel
+          ./example/build/basic
+
+  yyjson-versions:
+    name: yyjson ${{ matrix.yyjson }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        yyjson: ["0.5.0", "0.6.0", "0.8.0", "0.12.0"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and install yyjson ${{ matrix.yyjson }}
+        run: |
+          git clone --depth 1 --branch ${{ matrix.yyjson }} https://github.com/ibireme/yyjson.git yyjson-src
+          cmake -S yyjson-src -B yyjson-src/build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON
+          cmake --build yyjson-src/build --parallel
+          sudo cmake --install yyjson-src/build
+          sudo ldconfig
+
+      - name: Build and run the conformance suite
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel
+          ctest --test-dir build --output-on-failure

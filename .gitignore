@@ -1,0 +1,19 @@
+# Build directories
+build/
+build-*/
+cmake-build-*/
+out/
+
+# Editor / IDE
+.vscode/
+.idea/
+.cache/
+compile_commands.json
+*.swp
+*~
+
+# macOS
+.DS_Store
+
+# Test binaries
+conformance
